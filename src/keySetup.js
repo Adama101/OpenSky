@@ -1,4 +1,5 @@
 import { createSurfaceKeyboard } from './ui/surfaceKeyboard.js';
+import { isOsAtlas } from './product/os-atlas.js';
 
 /**
  * The POWER UP surface — paste a key, get a power.
@@ -175,6 +176,7 @@ export async function initKeySetup({
   fetchImpl,
   signal,
 } = {}) {
+  if (isOsAtlas()) return null;
   const chip = documentRef?.getElementById?.('key-setup-chip');
   const root = documentRef?.getElementById?.('key-setup');
   if (!chip || !root || root.dataset.initialized === 'true') return null;

@@ -26,8 +26,11 @@ import { firePerimetersProxy } from './firePerimeters.js';
 import { cycloneProxy } from './cyclones.js';
 import { windProxy } from './wind.js';
 
+import { isGevProduct } from '../product/os-atlas.js';
+import { osAtlasProviderPlugins } from './local-os-atlas.js';
+
 /** Construct the local provider plugins in their established order. */
-function localProviderPlugins() {
+function gevProviderPlugins() {
   return [
     openSkyProxy(),
     celestrakProxy(),
@@ -59,7 +62,11 @@ function localProviderPlugins() {
   ];
 }
 
-export { localProviderPlugins };
+function localProviderPlugins() {
+  return isGevProduct() ? gevProviderPlugins() : osAtlasProviderPlugins();
+}
+
+export { localProviderPlugins, gevProviderPlugins, osAtlasProviderPlugins };
 
 export {
   CCTV_FRAME_FETCH_TIMEOUT_MS,

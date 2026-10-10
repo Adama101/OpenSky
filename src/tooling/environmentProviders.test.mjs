@@ -5,7 +5,10 @@ import { terrainHeightsProxy } from 'gods-eye-view/server/providers/terrain';
 import { tomtomProxy } from 'gods-eye-view/server/providers/traffic';
 import { firmsProxy } from 'gods-eye-view/server/providers/firms';
 import { gbfsProxy } from 'gods-eye-view/server/providers/gbfs';
-import { localProviderPlugins } from '../../server/providers/local.js';
+import {
+  gevProviderPlugins,
+  osAtlasProviderPlugins,
+} from '../../server/providers/local.js';
 
 function install(plugin) {
   const routes = new Map();
@@ -53,11 +56,11 @@ function isolate(t, env = {}) {
 }
 const json = (res) => JSON.parse(res.body);
 
-test('standalone composition mounts every extracted provider exactly once without acquisition', (t) => {
+test('GEV composition mounts every extracted environment provider exactly once without acquisition', (t) => {
   t.mock.method(globalThis, 'fetch', () => {
     throw Error('construction must not fetch');
   });
-  const plugins = localProviderPlugins();
+  const plugins = gevProviderPlugins();
   for (const factory of [
     terrainHeightsProxy,
     tomtomProxy,
@@ -65,6 +68,17 @@ test('standalone composition mounts every extracted provider exactly once withou
     gbfsProxy,
   ])
     assert.equal(plugins.filter((p) => p.name === factory().name).length, 1);
+});
+
+test('OS Atlas composition keeps Phase 0 environment providers without TomTom or GBFS', (t) => {
+  t.mock.method(globalThis, 'fetch', () => {
+    throw Error('construction must not fetch');
+  });
+  const plugins = osAtlasProviderPlugins();
+  assert.equal(plugins.filter((p) => p.name === firmsProxy().name).length, 1);
+  assert.equal(plugins.filter((p) => p.name === tomtomProxy().name).length, 0);
+  assert.equal(plugins.filter((p) => p.name === gbfsProxy().name).length, 0);
+  assert.equal(plugins.filter((p) => p.name === 'uas-api').length, 1);
 });
 
 test('terrain middleware chunks missing points and reconstructs repeated/reordered requests from cache', async (t) => {

@@ -26,5 +26,9 @@
   ["weather-lightning", "l"],
   ["weather-radar", "v"],
   ["weather-satellite", "o"],
-  ["wind", "k"]
+  ["wind", "k"],
+  ["morocco-site-pack", "0"],
+  ["tenant-cctv", "3"],
+  ["satellite-tasking", "4"],
+  ["uas-live", "5"]
 ]

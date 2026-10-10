@@ -1,3 +1,6 @@
+import { isGevLegacy } from '../product/os-atlas.js';
+import { createControlStubLayer } from '../layers/controlStub/index.js';
+
 const CONTROL_LAYER_IDS = Object.freeze({
   trafficLayer: 'traffic',
   flightsLayer: 'flights',
@@ -49,9 +52,11 @@ export function createLayerCatalog(layers, metadata) {
 export function catalogControlServices(catalog) {
   if (!catalog?.get)
     throw new TypeError('An application layer catalog is required');
+  const legacy = isGevLegacy();
   return Object.fromEntries(
     Object.entries(CONTROL_LAYER_IDS).map(([role, id]) => {
-      const layer = catalog.get(id);
+      const layer =
+        catalog.get(id) ?? (legacy ? null : createControlStubLayer(id));
       if (!layer)
         throw new TypeError(`Control layer missing from catalog: ${id}`);
       return [role, layer];

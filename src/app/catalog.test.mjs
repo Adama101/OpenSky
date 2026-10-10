@@ -103,8 +103,12 @@ test('controls bind catalog instances rather than similarly named defaults', () 
   assert.equal(services.aisLiveVesselsLayer, layers[8]);
   assert.equal(services.localAdsbLayer, layers[12]);
   assert.equal(new Set(Object.values(services)).size, layers.length);
-  assert.throws(
-    () => catalogControlServices(createLayerCatalog([], [])),
-    /Control layer missing/,
-  );
+});
+
+test('OS Atlas supplies control stubs when legacy layers are absent from the catalog', () => {
+  const layers = [{ id: 'local-adsb' }];
+  const catalog = createLayerCatalog(layers, metadata(layers));
+  const services = catalogControlServices(catalog);
+  assert.equal(services.flightsLayer.id, 'flights');
+  assert.equal(services.localAdsbLayer, layers[0]);
 });

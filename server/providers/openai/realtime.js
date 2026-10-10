@@ -13,6 +13,8 @@ import {
 } from './constants.js';
 import { realtimeInstructions } from './instructions.js';
 import { GEV_REALTIME_TOOLS } from './tools.js';
+import { OS_ATLAS_REALTIME_TOOLS } from './os-atlas-tools.js';
+import { isGevProduct } from '../../product/os-atlas.js';
 
 function createRealtimeTokenHandler({
   annotationGuidance,
@@ -113,7 +115,7 @@ function createRealtimeTokenHandler({
           output: { voice },
         },
         instructions: realtimeInstructions(annotationGuidance),
-        tools: GEV_REALTIME_TOOLS,
+        tools: isGevProduct() ? GEV_REALTIME_TOOLS : OS_ATLAS_REALTIME_TOOLS,
         tool_choice: 'auto',
       },
     };

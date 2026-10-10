@@ -1,6 +1,8 @@
 import { catalogControlServices } from './catalog.js';
 import { StyleManager } from '../ui/composition.js';
 import { flyToAustin } from '../camera.js';
+import { isOsAtlas } from '../product/os-atlas.js';
+import * as Cesium from 'cesium';
 import { initCockpitCloudEffects } from '../cockpitCloudEffects.js';
 
 /** Construct the existing controls and camera presentation. */
@@ -41,8 +43,18 @@ export function createApplicationControls({
 
   // If no share link state, do default fly-to Austin
   if (!styleManager.hasShareState) {
-    loaderStatus.textContent = 'Flying to Austin, TX...';
-    defer(flyToAustin(viewer));
+    if (isOsAtlas()) {
+      loaderStatus.textContent = 'Flying to Morocco AOI...';
+      defer(() =>
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(-7.09, 31.79, 1_200_000),
+          duration: 2,
+        }),
+      );
+    } else {
+      loaderStatus.textContent = 'Flying to Austin, TX...';
+      defer(flyToAustin(viewer));
+    }
   } else {
     loaderStatus.textContent = 'Restoring shared view...';
   }

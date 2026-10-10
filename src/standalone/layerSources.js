@@ -1,3 +1,4 @@
+import { isGevLegacy } from '../product/os-atlas.js';
 import {
   createOpenSkySource,
   createAdsbLolSource,
@@ -17,10 +18,44 @@ import { createCycloneSource } from '../layers/cyclones/source.js';
 import { createWindSource } from '../layers/wind/source.js';
 import { createFirmsSource } from '../layers/firms/source.js';
 import { createReferenceSources } from '../sources/reference.js';
+import { createTenantCctvSource } from '../layers/tenant-cctv/source.js';
+import { createSatelliteTaskingSource } from '../layers/satellite-tasking/source.js';
+import { createUasLiveSource } from '../layers/uas-live/source.js';
+import { isTenantAisEnabled } from '../product/tenant-config.js';
+
 export { createReferenceSources as createStandaloneReferenceSources } from '../sources/reference.js';
 
-/** Select standalone providers without starting their acquisition. */
-export function createStandaloneLayerSources() {
+function createOsAtlasLayerSources() {
+  const sources = {
+    ...createReferenceSources(),
+    wind: createWindSource(),
+    weather: createWeatherSource(),
+    cyclones: createCycloneSource(),
+    firms: createFirmsSource(),
+    'tenant-cctv': createTenantCctvSource(),
+    'satellite-tasking': createSatelliteTaskingSource(),
+    'uas-live': createUasLiveSource(),
+  };
+  if (isTenantAisEnabled()) {
+    sources.vessels = createAisStreamSource({
+      apiUrl: import.meta.env?.VITE_AIS_LIVE_API_URL || '/api/ais-live',
+    });
+  } else {
+    sources.vessels = {
+      label: 'AIS (disabled)',
+      async getSnapshot() {
+        return {
+          vessels: [],
+          stale: true,
+          message: 'Enable VITE_TENANT_AIS_ENABLED and server AISSTREAM_API_KEY',
+        };
+      },
+    };
+  }
+  return sources;
+}
+
+function createGevLayerSources() {
   return {
     ...createReferenceSources(),
     flights: createOpenSkySource(),
@@ -43,3 +78,10 @@ export function createStandaloneLayerSources() {
     cyclones: createCycloneSource(),
   };
 }
+
+/** Select layer source providers for the active product profile. */
+export function createStandaloneLayerSources() {
+  return isGevLegacy() ? createGevLayerSources() : createOsAtlasLayerSources();
+}
+
+export { createGevLayerSources, createOsAtlasLayerSources };

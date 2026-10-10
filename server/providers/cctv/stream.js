@@ -292,10 +292,16 @@ export function createHlsPuller({
     }
     return false;
   };
-  const buildPlaylist = async (entry, cameraId, leaseId = 'legacy') => {
+  const buildPlaylist = async (
+    entry,
+    cameraId,
+    leaseId = 'legacy',
+    mediaBasePath = '/api/cctv/media',
+  ) => {
     if (entry.stopping || entry.segments.size < 2) return null;
     touch(entry, leaseId);
     const segments = [...entry.segments.values()].sort((a, b) => a.seq - b.seq);
+    const mediaPrefix = `${mediaBasePath}/${encodeURIComponent(cameraId)}`;
     const lines = [
       '#EXTM3U',
       '#EXT-X-VERSION:3',
@@ -312,7 +318,7 @@ export function createHlsPuller({
         lines.push('#EXT-X-DISCONTINUITY');
       lines.push(
         `#EXTINF:${segment.duration.toFixed(3)},`,
-        `/api/cctv/media/${encodeURIComponent(cameraId)}/seg_${segment.seq}.ts?session=${entry.token}&lease=${encodeURIComponent(leaseId)}`,
+        `${mediaPrefix}/seg_${segment.seq}.ts?session=${entry.token}&lease=${encodeURIComponent(leaseId)}`,
       );
       previous = segment.seq;
     }

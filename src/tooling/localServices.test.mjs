@@ -21,6 +21,7 @@ import { openAiRealtimeProxy } from 'gods-eye-view/server/providers/openai';
 import { keySetupEndpoint } from 'gods-eye-view/server/standalone/key-setup';
 import { realtimeInstructions } from '../../server/providers/openai/instructions.js';
 import { GEV_REALTIME_TOOLS } from '../../server/providers/openai/tools.js';
+import { OS_ATLAS_REALTIME_TOOLS } from '../../server/providers/openai/os-atlas-tools.js';
 
 function install(plugin, preview = false) {
   const routes = new Map();
@@ -159,6 +160,7 @@ test('weather-only requests share upstream work and retain fresh and stale respo
 test('Realtime handler preserves tools and default instructions, isolates supplied annotation guidance, and keeps the upstream key server-side', async (t) => {
   env(t, 'OPENAI_API_KEY', 'fixture-upstream-secret');
   env(t, 'GEV_RATELIMIT_OPENAI_PER_MIN', undefined);
+  env(t, 'VITE_PRODUCT', 'gev');
   const sent = [];
   t.mock.method(globalThis, 'fetch', async (url, options) => {
     assert.equal(url, 'https://api.openai.com/v1/realtime/client_secrets');
@@ -257,7 +259,8 @@ test('key setup writes only the supplied application root, retains request guard
   assert.equal(existsSync(path.join(untouched, '.env')), false);
 });
 
-test('Realtime service configuration selects compatible endpoint/model without forwarding request model IDs or keys', async () => {
+test('Realtime service configuration selects compatible endpoint/model without forwarding request model IDs or keys', async (t) => {
+  env(t, 'VITE_PRODUCT', 'gev');
   const handler = install(
     openAiRealtimeProxy({
       realtime: {

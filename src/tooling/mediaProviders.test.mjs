@@ -5,7 +5,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { cctvProxy } from '../../server/providers/cctv.js';
 import { radioBrowserProxy } from '../../server/providers/radio.js';
-import { localProviderPlugins } from '../../server/providers/local.js';
+import {
+  gevProviderPlugins,
+  osAtlasProviderPlugins,
+} from '../../server/providers/local.js';
+import { tenantCctvProxy } from '../../server/providers/tenant-cctv.js';
 
 function install(plugin, hook = 'configureServer') {
   let handler;
@@ -95,12 +99,20 @@ test('CCTV instances resolve their own application source root and isolate catal
   assert.deepEqual(JSON.parse((await second('/health')).body).cameras, []);
 });
 
-test('composition creates exactly one CCTV and radio provider without acquisition', (t) => {
+test('GEV composition creates exactly one public CCTV and radio provider without acquisition', (t) => {
   isolate(t);
-  const plugins = localProviderPlugins();
+  const plugins = gevProviderPlugins();
   for (const factory of [cctvProxy, radioBrowserProxy]) {
     assert.equal(plugins.filter((p) => p.name === factory().name).length, 1);
   }
+});
+
+test('OS Atlas composition mounts tenant CCTV stub instead of public catalog proxies', (t) => {
+  isolate(t);
+  const plugins = osAtlasProviderPlugins();
+  assert.equal(plugins.filter((p) => p.name === tenantCctvProxy().name).length, 1);
+  assert.equal(plugins.filter((p) => p.name === cctvProxy().name).length, 0);
+  assert.equal(plugins.filter((p) => p.name === radioBrowserProxy().name).length, 0);
 });
 
 for (const hook of ['configureServer', 'configurePreviewServer']) {

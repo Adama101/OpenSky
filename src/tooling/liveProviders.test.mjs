@@ -167,6 +167,7 @@ test('AIS preview route ingests through the socket, returns tracks and disposes 
   });
   environment(t, {
     AISSTREAM_API_KEY: 'fixture-key',
+    VITE_TENANT_AIS_ENABLED: 'true',
     AISSTREAM_URL: `ws://127.0.0.1:${upstream.address().port}`,
     AISSTREAM_BOUNDING_BOXES: undefined,
     AISSTREAM_MESSAGE_TYPES: undefined,

@@ -1,5 +1,12 @@
 import { createStandaloneApplication } from './standalone/application.js';
 import { describeError } from './standalone/errors.js';
+import {
+  bootstrapOsAtlasSession,
+  installOsAtlasFetchSession,
+} from './product/os-atlas-session.js';
+
+installOsAtlasFetchSession();
+void bootstrapOsAtlasSession();
 
 const application = createStandaloneApplication({
   googleApiKey: import.meta.env.GOOGLE_MAPS_API_KEY,

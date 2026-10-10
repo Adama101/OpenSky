@@ -4,114 +4,46 @@ import assert from 'node:assert/strict';
 import { createApplicationCatalog } from './constructCatalog.js';
 import { createStandaloneLayerSources } from '../standalone/layerSources.js';
 import { catalogControlServices } from './catalog.js';
-import { LayerLifecycle } from '../data/lifecycle.js';
+import { OS_ATLAS_LAYER_IDS } from '../product/os-atlas-layer-registry.js';
 
-function fixtureSources(ids, calls) {
-  const sources = createStandaloneLayerSources();
-  sources.military = {
-    getSnapshot: async () => {
-      throw new Error('Use identity acquisition');
-    },
-    async getIdentities(_query, { signal }) {
-      calls.push(signal);
-      return ids;
-    },
-  };
-  return sources;
-}
-
-test('catalogs construct distinct layers and classification from their supplied source', async (t) => {
-  const a = new AbortController();
-  const b = new AbortController();
-  t.after(() => {
-    a.abort();
-    b.abort();
+test('OS Atlas catalog exposes only the slim layer set', async (t) => {
+  const controller = new AbortController();
+  t.after(() => controller.abort());
+  const catalog = createApplicationCatalog({
+    sources: createStandaloneLayerSources(),
+    signal: controller.signal,
+    surface: fixtureSurface(controller.signal),
   });
-  const callsA = [];
-  const callsB = [];
-  const first = createApplicationCatalog({
-    sources: fixtureSources(['abc123'], callsA),
-    signal: a.signal,
-    surface: fixtureSurface(a.signal),
-  });
-  const second = createApplicationCatalog({
-    sources: fixtureSources(['def456'], callsB),
-    signal: b.signal,
-    surface: fixtureSurface(b.signal),
-  });
-  assert.equal(first.layers.length, 29);
-  assert.ok(first.get('local-adsb'), 'Local ADS-B is registered');
-  assert.deepEqual(
-    first.metadata.find(({ id }) => id === 'local-adsb'),
-    { id: 'local-adsb', disposition: 'local-only' },
-    'the hardware-local layer is never serialized into links',
-  );
-  assert.notEqual(first.weatherClock, second.weatherClock);
-  await first.weatherClock.setTarget('2026-09-21T12:00:00.000Z');
-  assert.match(
-    first.get('wind').getRowControls().info,
-    /Forecast · does not follow history/,
-  );
-  assert.equal(second.get('wind').getRowControls().summary.status, null);
-  for (const id of ['weather-radar', 'weather-satellite', 'weather-lightning'])
-    assert.equal(
-      first.get(id).getDiagnostics().clock.target,
-      '2026-09-21T12:00:00.000Z',
-    );
-  assert.ok(first.get('fire-perimeters'));
-  assert.ok(first.get('transit'));
-  const order = first.layers.map(({ id }) => id);
-  assert.deepEqual(
-    order.slice(order.indexOf('traffic'), order.indexOf('directions') + 1),
-    ['traffic', 'cctv', 'radio', 'transit', 'bikeshare', 'directions'],
-  );
-  assert.ok(first.get('bhote-koshi-2026'));
-  assert.ok(first.get('bhote-koshi-locator'));
-  const lifecycle = new LayerLifecycle({});
-  for (const layer of first.layers) lifecycle.register(layer);
-  const rows = lifecycle.getAll();
-  for (const id of ['bhote-koshi-2026', 'bhote-koshi-locator']) {
-    assert.equal(
-      rows.find((row) => row.id === id)?.showInTogglePanel,
-      false,
-      `${id} remains registered for Scenes but is absent from Data Layers`,
-    );
-    assert.equal(typeof first.get(id).enable, 'function');
-    assert.equal(typeof first.get(id).setParams, 'function');
+  const ids = catalog.layers.map(({ id }) => id);
+  for (const removed of [
+    'flights',
+    'cctv',
+    'radio',
+    'traffic',
+    'satellites',
+    'transit',
+  ]) {
+    assert.equal(ids.includes(removed), false, `${removed} must be stripped`);
   }
-  assert.equal(
-    rows.find((row) => row.id === 'flights')?.showInTogglePanel,
-    true,
-    'ordinary data layer entries remain visible',
-  );
+  assert.ok(catalog.get('morocco-site-pack'));
+  assert.ok(catalog.get('tenant-cctv'));
+  assert.ok(catalog.get('local-adsb'));
+  assert.equal(catalog.militaryRegistry, null);
   assert.deepEqual(
-    first.layers.map(({ id }) => id),
-    second.layers.map(({ id }) => id),
+    catalog.metadata.find(({ id }) => id === 'local-adsb'),
+    { id: 'local-adsb', disposition: 'local-only' },
   );
-  for (const layer of first.layers)
-    assert.notEqual(layer, second.get(layer.id));
-  assert.equal(
-    catalogControlServices(first).satellitesLayer,
-    first.get('satellites'),
-  );
-  assert.equal(callsA.length, 0, 'construction must not acquire');
-  await first.militaryRegistry.refreshMilitaryRegistryIfStale();
-  await second.militaryRegistry.refreshMilitaryRegistryIfStale();
-  assert.equal(first.militaryRegistry.isMilitaryIcao('abc123'), true);
-  assert.equal(first.militaryRegistry.isMilitaryIcao('def456'), false);
-  assert.equal(second.militaryRegistry.isMilitaryIcao('def456'), true);
-  a.abort();
-  assert.equal(
-    await first.weatherClock.setTarget('2026-09-21T13:00:00.000Z'),
-    false,
-  );
-  assert.equal(callsA[0].aborted, true);
-  assert.equal(first.militaryRegistry.isMilitaryIcao('abc123'), false);
-  assert.equal(callsB[0].aborted, false);
-  assert.equal(second.militaryRegistry.isMilitaryIcao('def456'), true);
+  const services = catalogControlServices(catalog);
+  assert.equal(services.localAdsbLayer, catalog.get('local-adsb'));
+  assert.equal(services.flightsLayer.id, 'flights');
+  assert.equal(typeof services.flightsLayer.stopTracking, 'function');
+  for (const id of OS_ATLAS_LAYER_IDS) {
+    if (id === 'ais-live-vessels') continue;
+    assert.ok(catalog.get(id), `missing ${id}`);
+  }
 });
 
-test('invalid or already cancelled construction fails before classification can acquire', () => {
+test('invalid OS Atlas construction fails before layers attach', () => {
   const lifetime = new AbortController();
   assert.throws(
     () =>
@@ -128,6 +60,7 @@ test('invalid or already cancelled construction fails before classification can 
       createApplicationCatalog({
         sources: createStandaloneLayerSources(),
         signal: lifetime.signal,
+        surface: fixtureSurface(lifetime.signal),
       }),
     { name: 'AbortError' },
   );

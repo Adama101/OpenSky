@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { createAisStreamAdapter } from '../../../src/data/aisStreamAdapter.js';
 import { parseSilenceTimeoutEnv } from '../../../src/data/aisWatchdog.js';
 import { clampInt } from '../common/query.js';
+import { isTenantAisEnabledOnServer } from '../../product/os-atlas.js';
 import {
   AISSTREAM_CACHE_MAX,
   AISSTREAM_STALE_MS,
@@ -73,6 +74,20 @@ export function aisLiveProxy() {
   function install(middlewares) {
     middlewares.use('/api/ais-live', async (req, res) => {
       try {
+        if (!isTenantAisEnabledOnServer()) {
+          res.statusCode = 503;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(
+            JSON.stringify({
+              rows: [],
+              error: 'tenant_ais_disabled',
+              message:
+                'Set VITE_TENANT_AIS_ENABLED=true and AISSTREAM_API_KEY to enable vessels',
+            }),
+          );
+          return;
+        }
         ensureAisStreamConnection();
         const incoming = new URL(req.url || '', 'http://localhost');
 
@@ -292,6 +307,7 @@ function aisKeyFingerprint() {
  * background interval, so recovery does not depend on browser traffic.
  */
 function ensureAisStreamConnection() {
+  if (!isTenantAisEnabledOnServer()) return;
   const adapter = aisAdapter();
   if (_aisNeedsRearm) {
     // Post-dispose re-arm, now that the restarted server's .env is loaded. The
