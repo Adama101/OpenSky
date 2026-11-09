@@ -13,59 +13,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: Node ${{ matrix.node }}
+  product:
+    name: OS Atlas product
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        node: [24.14.0, 26.x]
+    timeout-minutes: 30
     env:
       PUPPETEER_SKIP_DOWNLOAD: '1'
-      GEV_REQUIRE_ALLOCATION_GATE: ${{ matrix.node == '24.14.0' && '1' || '0' }}
-    steps:
-      - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Use Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: ${{ matrix.node }}
-          cache: npm
-
-      - name: Install locked dependencies
-        run: npm ci
-
-      - name: Run setup policy checks
-        run: npm run doctor -- --json
-
-      - name: Check adopted formatting
-        run: npm run format:check
-
-      - name: Check package boundaries
-        run: npm run check:boundaries
-
-      - name: Check published layer-token allocations
-        if: github.event_name == 'pull_request'
-        run: npm run layer-token:check -- --base-ref origin/main
-
-      - name: Run unit tests
-        run: npm test
-
-      - name: Build production bundle
-        run: npm run build
-
-  windows-onboarding:
-    name: Windows onboarding
-    runs-on: windows-latest
-    timeout-minutes: 20
-    env:
-      PUPPETEER_SKIP_DOWNLOAD: '1'
-      GEV_REQUIRE_ALLOCATION_GATE: '0'
+    defaults:
+      run:
+        working-directory: OS Atlas
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -77,18 +33,47 @@ jobs:
         with:
           node-version: 24.14.0
           cache: npm
+          cache-dependency-path: OS Atlas/package-lock.json
 
-      - name: Run the Pinokio install path
-        run: node scripts/pinokio-install.mjs
+      - name: Install locked dependencies
+        run: npm ci
 
-      - name: Check adopted formatting
-        run: npm run format:check
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"
 
-      - name: Check package boundaries
-        run: npm run check:boundaries
+      - name: Backend API tests (SQLite)
+        run: |
+          npm run backend:install
+          npm run test:backend
 
-      - name: Run focused onboarding tests
-        run: node --test src/setupDoctor.test.mjs src/pinokioEnvironment.test.mjs src/pinokioPreflight.test.mjs src/pinokioLauncherContract.test.mjs src/keySetupHardening.test.mjs src/mapStartup.test.mjs src/hudSummaryResponse.test.mjs
+      - name: Backend tests and migrations on Postgres + PostGIS
+        run: |
+          docker run -d --name pg -e POSTGRES_USER=osatlas -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=os_atlas_test -p 5432:5432 postgis/postgis:16-3.4
+          for i in $(seq 1 30); do docker exec pg pg_isready -U osatlas && break; sleep 2; done
+          DATABASE_URL=postgresql+psycopg://osatlas:ci@127.0.0.1:5432/os_atlas_test npm run test:backend
+          DATABASE_URL=postgresql+psycopg://osatlas:ci@127.0.0.1:5432/os_atlas_test uv run --project backend alembic -c backend/alembic.ini upgrade head
+          DATABASE_URL=postgresql+psycopg://osatlas:ci@127.0.0.1:5432/os_atlas_test uv run --project backend alembic -c backend/alembic.ini check
 
-      - name: Build production bundle
-        run: npm run build
+      - name: Edge CV and AI analyst tests
+        run: |
+          npm run edge:install
+          npm run ai:install
+          npm run test:edge
+          npm run test:ai
+
+      - name: Fleet gateway tests (MAVLink command and control)
+        run: npm run test:fleet
+
+      - name: Console tests
+        run: npm run test:console
+
+      - name: Compose stack definition (dev, all profiles)
+        run: docker compose -f infra/compose.yaml --profile edge --profile ai --profile fleet-sim config --quiet
+
+      - name: Production configuration (realm, overlay, exposure, no dev defaults)
+        run: npm run check:prod
+
+      - name: Production console build
+        run: OS_ATLAS_HOST=atlas.example.ma npm run build:prod
